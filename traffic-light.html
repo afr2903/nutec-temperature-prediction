@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación de Semáforo (Stateflow)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilos adicionales para el interruptor toggle */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #4ade80; /* green-400 */
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #4ade80; /* green-400 */
+        }
+        /* Estilo base para las luces apagadas */
+        .light {
+            background-color: #d1d5db; /* gray-300 */
+            opacity: 0.3; /* Opacidad para indicar apagado */
+        }
+        /* Estilos para luces encendidas */
+        .light.red.active { background-color: #ef4444; opacity: 1; }
+        .light.yellow.active { background-color: #facc15; opacity: 1; }
+        .light.green.active { background-color: #22c55e; opacity: 1; }
+
+        /* Estilo para el modo Standby */
+        .standby .light {
+            background-color: #d1d5db;
+            opacity: 0.3;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen font-sans">
+
+    <div class="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+        <h1 class="text-2xl font-bold text-center mb-6 text-gray-700">Simulación de Semáforo</h1>
+
+        <div id="traffic-light-container" class="bg-gray-800 p-4 rounded-lg w-24 mx-auto flex flex-col items-center space-y-3 mb-6 standby">
+            <div id="red-light" class="light red w-16 h-16 rounded-full border-2 border-gray-500"></div>
+            <div id="yellow-light" class="light yellow w-16 h-16 rounded-full border-2 border-gray-500"></div>
+            <div id="green-light" class="light green w-16 h-16 rounded-full border-2 border-gray-500"></div>
+        </div>
+
+        <div class="text-center mb-6">
+            <span class="text-lg font-semibold text-gray-600">Estado Actual:</span>
+            <span id="status-display" class="block text-3xl font-bold text-gray-800 mt-1">Stand-by</span>
+        </div>
+
+        <div class="text-center mb-6">
+            <span class="text-lg font-semibold text-gray-600">Tiempo:</span>
+            <span id="timer-display" class="block text-2xl font-bold text-gray-800 mt-1">0.00</span>
+        </div>
+
+        <div class="flex items-center justify-center">
+            <span class="text-gray-700 mr-3 font-medium">Apagado</span>
+            <div class="relative inline-block w-14 mr-2 align-middle select-none transition duration-200 ease-in">
+                <input type="checkbox" name="toggle" id="toggle-switch" class="toggle-checkbox absolute block w-7 h-7 rounded-full bg-white border-4 appearance-none cursor-pointer border-gray-300"/>
+                <label for="toggle-switch" class="toggle-label block overflow-hidden h-7 rounded-full bg-gray-300 cursor-pointer"></label>
+            </div>
+            <span class="text-gray-700 ml-1 font-medium">Encendido</span>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Elementos del DOM ---
+        const redLight = document.getElementById('red-light');
+        const yellowLight = document.getElementById('yellow-light');
+        const greenLight = document.getElementById('green-light');
+        const statusDisplay = document.getElementById('status-display');
+        const toggleSwitch = document.getElementById('toggle-switch');
+        const trafficLightContainer = document.getElementById('traffic-light-container');
+
+        // --- Definición de Estados ---
+        const STATES = {
+            STANDBY: 'Stand-by',
+            GREEN: 'Verde',
+            YELLOW: 'Amarillo',
+            RED: 'Rojo'
+        };
+
+        // --- Tiempos de Duración (en milisegundos) ---
+        const DURATION = {
+            GREEN: 10000, // 10 segundos
+            YELLOW: 3000,  // 3 segundos
+            RED: 7000     // 7 segundos
+        };
+
+        // --- Variables de Estado ---
+        let currentState = STATES.STANDBY; // Estado inicial
+        let timerId = null; // Identificador para setTimeout
+        let timerInterval = null; // Identificador para el intervalo del timer
+        let startTime = 0; // Tiempo de inicio para el contador
+
+        // --- Funciones de Acciones y Transiciones ---
+
+        /**
+         * Apaga todas las luces del semáforo.
+         */
+        function turnOffAllLights() {
+            redLight.classList.remove('active');
+            yellowLight.classList.remove('active');
+            greenLight.classList.remove('active');
+            trafficLightContainer.classList.add('standby'); // Añade clase para estilo standby
+        }
+
+        /**
+         * Actualiza la interfaz (luces y display) según el estado actual.
+         * @param {string} state - El estado al que se va a entrar.
+         */
+        function updateUI(state) {
+            turnOffAllLights(); // Primero apaga todas
+            trafficLightContainer.classList.remove('standby'); // Quita clase standby si estaba activa
+
+            statusDisplay.textContent = state; // Actualiza el texto del display
+            
+            // Reinicia el contador de tiempo
+            resetTimer();
+
+            // Enciende la luz correspondiente
+            switch (state) {
+                case STATES.GREEN:
+                    greenLight.classList.add('active');
+                    break;
+                case STATES.YELLOW:
+                    yellowLight.classList.add('active');
+                    break;
+                case STATES.RED:
+                    redLight.classList.add('active');
+                    break;
+                case STATES.STANDBY:
+                    // Ya se apagaron las luces y se actualizó el texto
+                    trafficLightContainer.classList.add('standby');
+                    break;
+            }
+        }
+
+        /**
+         * Reinicia y comienza el contador de tiempo
+         */
+        function resetTimer() {
+            // Detener el temporizador anterior si existe
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+            
+            const timerDisplay = document.getElementById('timer-display');
+            
+            // Si está en Standby, solo mostrar 0.00
+            if (currentState === STATES.STANDBY) {
+                timerDisplay.textContent = '0.00';
+                return;
+            }
+            
+            // Establecer tiempo de inicio
+            startTime = Date.now();
+            
+            // Iniciar intervalo para actualizar cada 10ms (para obtener 2 decimales)
+            timerInterval = setInterval(() => {
+                const elapsedTime = (Date.now() - startTime) / 1000;
+                timerDisplay.textContent = elapsedTime.toFixed(2);
+            }, 10);
+        }
+
+        /**
+         * Detiene el temporizador.
+         */
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            document.getElementById('timer-display').textContent = '0.00';
+        }
+
+        /**
+         * Función principal que maneja las transiciones de estado.
+         */
+        function transitionState() {
+            // Limpia cualquier temporizador anterior (importante)
+            clearTimeout(timerId);
+            timerId = null;
+
+            let nextState;
+            let duration;
+
+            // Lógica de transición basada en el estado actual
+            switch (currentState) {
+                case STATES.GREEN:
+                    nextState = STATES.YELLOW;
+                    duration = DURATION.YELLOW;
+                    break;
+                case STATES.YELLOW:
+                    nextState = STATES.RED;
+                    duration = DURATION.RED;
+                    break;
+                case STATES.RED:
+                    nextState = STATES.GREEN;
+                    duration = DURATION.GREEN;
+                    break;
+                case STATES.STANDBY:
+                default:
+                    // Si está en Standby o estado inesperado, no hace nada cíclico.
+                    return;
+            }
+
+            // Actualiza al estado actual (antes de esperar)
+            currentState = nextState;
+            updateUI(currentState);
+
+            // Programa la próxima transición después de la duración correspondiente
+            timerId = setTimeout(transitionState, duration);
+        }
+
+        /**
+         * Inicia la simulación del semáforo.
+         */
+        function startSimulation() {
+            if (currentState === STATES.STANDBY) {
+                currentState = STATES.GREEN;
+                updateUI(currentState);
+                // Programa la primera transición (Verde -> Amarillo)
+                timerId = setTimeout(transitionState, DURATION.GREEN);
+            }
+        }
+
+        /**
+         * Detiene la simulación y pone el semáforo en modo Stand-by.
+         */
+        function stopSimulation() {
+            clearTimeout(timerId); // Cancela cualquier transición programada
+            stopTimer(); // Detiene el contador de tiempo
+            timerId = null;
+            currentState = STATES.STANDBY;
+            updateUI(currentState); // Actualiza la UI al estado Stand-by
+        }
+
+        // --- Event Listener para el Interruptor ---
+        toggleSwitch.addEventListener('change', function() {
+            if (this.checked) {
+                // Si el interruptor está encendido
+                startSimulation();
+            } else {
+                // Si el interruptor está apagado
+                stopSimulation();
+            }
+        });
+
+        // --- Inicialización ---
+        // Asegura que la UI esté en el estado inicial correcto al cargar la página
+        updateUI(STATES.STANDBY);
+
+    </script>
+
+</body>
+</html>
