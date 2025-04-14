@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación de Climatización (Stateflow)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilos para los interruptores toggle */
+        .toggle-checkbox:checked {
+            @apply: right-0 border-blue-500;
+            right: 0;
+            border-color: #3b82f6; /* blue-500 */
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            @apply: bg-blue-500;
+            background-color: #3b82f6; /* blue-500 */
+        }
+        .toggle-checkbox:disabled + .toggle-label {
+            @apply: bg-gray-300 cursor-not-allowed;
+            background-color: #d1d5db; /* gray-300 */
+            cursor: not-allowed;
+        }
+         .toggle-checkbox:disabled {
+             cursor: not-allowed;
+             border-color: #d1d5db; /* gray-300 */
+         }
+
+        /* Estilo para el indicador AC ON/OFF */
+        .ac-indicator {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            margin: 1rem auto;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            text-align: center;
+            border: 3px solid transparent;
+        }
+        .ac-indicator.on {
+            background-color: #3b82f6; /* blue-500 */
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.7); /* Sombra azul */
+            border-color: #1d4ed8; /* blue-700 */
+        }
+        .ac-indicator.off {
+            background-color: #9ca3af; /* gray-400 */
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+             border-color: #6b7280; /* gray-500 */
+             color: #e5e7eb; /* gray-200 */
+        }
+         /* Estilo para el slider de temperatura */
+         input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px;
+            background: #ef4444; /* red-500 */
+            border-radius: 50%; cursor: pointer;
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 20px; height: 20px;
+            background: #ef4444; /* red-500 */
+            border-radius: 50%; cursor: pointer; border: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen font-sans">
+
+    <div class="bg-white p-8 rounded-lg shadow-xl max-w-lg w-full">
+        <div class="text-right mb-4">
+            <a href="index.html" class="inline-block bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold py-2 px-4 rounded transition duration-150 ease-in-out">
+                ← Volver al Menú
+            </a>
+        </div>
+        
+        <h1 class="text-2xl font-bold text-center mb-6 text-gray-700">Simulación de Climatización</h1>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+
+            <div class="space-y-4">
+                <div class="px-2">
+                    <label for="temp-slider" class="block text-sm font-medium text-gray-700 mb-1">Temperatura Ambiente: <span id="current-temp-value" class="font-bold">22</span> °C</label>
+                    <input id="temp-slider" type="range" min="15" max="35" value="22" step="1" class="w-full h-2 bg-red-100 rounded-lg appearance-none cursor-pointer dark:bg-red-700">
+                </div>
+
+                <div class="flex items-center justify-center bg-gray-50 p-3 rounded border">
+                     <span class="text-gray-700 mr-3 font-medium">Manual</span>
+                     <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                         <input type="checkbox" name="mode-toggle" id="mode-toggle-switch" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                         <label for="mode-toggle-switch" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                     </div>
+                     <span class="text-gray-700 ml-1 font-medium">Automático</span>
+                </div>
+                 <div class="text-center text-sm text-gray-500">Modo Actual: <span id="current-mode-display" class="font-semibold">Manual</span></div>
+            </div>
+
+            <div class="space-y-4 flex flex-col items-center">
+                 <div id="manual-control-section" class="flex items-center justify-center bg-gray-50 p-3 rounded border w-full max-w-xs">
+                     <span class="text-gray-700 mr-3 font-medium">AC Apagado</span>
+                     <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                         <input type="checkbox" name="manual-ac-toggle" id="manual-ac-switch" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                         <label for="manual-ac-switch" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                     </div>
+                     <span class="text-gray-700 ml-1 font-medium">AC Encendido</span>
+                 </div>
+                 <div class="text-center text-xs text-gray-400">(Control habilitado sólo en modo Manual)</div>
+
+                 <div id="ac-indicator" class="ac-indicator off">
+                     AC<br>OFF
+                 </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Elementos del DOM ---
+        const tempSlider = document.getElementById('temp-slider');
+        const currentTempValueDisplay = document.getElementById('current-temp-value');
+        const modeToggleSwitch = document.getElementById('mode-toggle-switch');
+        const currentModeDisplay = document.getElementById('current-mode-display');
+        const manualAcSwitch = document.getElementById('manual-ac-switch');
+        const manualControlSection = document.getElementById('manual-control-section');
+        const acIndicator = document.getElementById('ac-indicator');
+
+        // --- Constantes y Definiciones ---
+        const MODE_AUTO = 'Automatico';
+        const MODE_MANUAL = 'Manual';
+        const TEMPERATURE_THRESHOLD = 25; // Umbral para encendido automático
+
+        // --- Variables de Estado ---
+        let operatingMode = MODE_MANUAL; // Modo inicial
+        let ambientTemperature = parseInt(tempSlider.value);
+        let manualAcRequest = false; // Estado deseado en modo manual (inicialmente apagado)
+        let isAcOn = false; // Estado final del AC
+
+        // --- Funciones ---
+
+        /**
+         * Determina el estado final del AC (ON/OFF) basado en el modo,
+         * la temperatura y la solicitud manual.
+         */
+        function determineAcState() {
+            if (operatingMode === MODE_AUTO) {
+                isAcOn = ambientTemperature > TEMPERATURE_THRESHOLD;
+                console.log(`Modo Auto: Temp=${ambientTemperature}°C, Umbral=${TEMPERATURE_THRESHOLD}°C -> AC ${isAcOn ? 'ON' : 'OFF'}`);
+            } else { // MODE_MANUAL
+                isAcOn = manualAcRequest;
+                console.log(`Modo Manual: Solicitud=${manualAcRequest} -> AC ${isAcOn ? 'ON' : 'OFF'}`);
+            }
+            updateDisplay(); // Actualizar la UI después de determinar el estado
+        }
+
+        /**
+         * Actualiza todos los elementos visuales de la interfaz.
+         */
+        function updateDisplay() {
+            // Actualizar display de temperatura
+            currentTempValueDisplay.textContent = ambientTemperature;
+
+            // Actualizar display de modo
+            currentModeDisplay.textContent = operatingMode;
+
+            // Habilitar/Deshabilitar control manual
+            const isManualMode = operatingMode === MODE_MANUAL;
+            manualAcSwitch.disabled = !isManualMode;
+            manualControlSection.classList.toggle('opacity-50', !isManualMode); // Atenuar si no es manual
+             // Sincronizar el switch manual con el estado 'manualAcRequest' (solo visualmente si está deshabilitado)
+             manualAcSwitch.checked = manualAcRequest;
+
+
+            // Actualizar indicador AC
+            if (isAcOn) {
+                acIndicator.classList.remove('off');
+                acIndicator.classList.add('on');
+                acIndicator.innerHTML = 'AC<br>ON';
+            } else {
+                acIndicator.classList.remove('on');
+                acIndicator.classList.add('off');
+                acIndicator.innerHTML = 'AC<br>OFF';
+            }
+        }
+
+        /**
+         * Maneja cambios en el slider de temperatura.
+         */
+        function handleTemperatureChange() {
+            ambientTemperature = parseInt(tempSlider.value);
+            determineAcState(); // Re-evaluar estado AC y actualizar UI
+        }
+
+        /**
+         * Maneja cambios en el interruptor de modo (Auto/Manual).
+         */
+        function handleModeChange() {
+            operatingMode = modeToggleSwitch.checked ? MODE_AUTO : MODE_MANUAL;
+            console.log(`Modo cambiado a: ${operatingMode}`);
+            determineAcState(); // Re-evaluar estado AC y actualizar UI
+        }
+
+        /**
+         * Maneja cambios en el interruptor manual de AC (On/Off).
+         */
+        function handleManualSwitchChange() {
+            if (operatingMode === MODE_MANUAL) {
+                manualAcRequest = manualAcSwitch.checked;
+                determineAcState(); // Re-evaluar estado AC y actualizar UI
+            }
+        }
+
+        // --- Event Listeners ---
+        tempSlider.addEventListener('input', handleTemperatureChange);
+        modeToggleSwitch.addEventListener('change', handleModeChange);
+        manualAcSwitch.addEventListener('change', handleManualSwitchChange);
+
+        // --- Inicialización ---
+        determineAcState(); // Calcular estado inicial y actualizar UI
+
+    </script>
+
+</body>
+</html>
