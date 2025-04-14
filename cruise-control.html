@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación de Control Crucero (Stateflow - Actualizado)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilo para el indicador de velocidad crucero */
+        .gauge {
+            width: 150px;
+            height: 75px;
+            border: 3px solid #d1d5db; /* gray-300 */
+            border-bottom: none;
+            border-radius: 150px 150px 0 0;
+            position: relative;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            background-color: #f9fafb; /* gray-50 */
+            margin: 1rem auto; /* Centrar y dar espacio */
+            box-shadow: inset 0 -10px 15px -5px rgba(0,0,0,0.05);
+        }
+        .gauge-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #1f2937; /* gray-800 */
+            margin-bottom: 5px;
+            transition: color 0.3s ease; /* Transición para el color */
+        }
+         .gauge-label {
+            position: absolute;
+            bottom: -25px; /* Posicionar etiqueta debajo */
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.9rem;
+            color: #4b5563; /* gray-600 */
+            font-weight: medium;
+        }
+        /* Estilo para el botón cuando está activo */
+        .active-button {
+             background-color: #10b981 !important; /* emerald-500 */
+             border-color: #059669 !important; /* emerald-600 */
+        }
+        .active-button:hover {
+             background-color: #059669 !important; /* emerald-600 */
+        }
+        /* Estilo para el gauge cuando el crucero está activo */
+        .gauge.active .gauge-value {
+            color: #059669; /* emerald-600 */
+        }
+        /* Estilo para el slider (opcional, para mejorar apariencia) */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #3b82f6; /* blue-500 */
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #3b82f6; /* blue-500 */
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen font-sans">
+
+    <div class="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+        <h1 class="text-2xl font-bold text-center mb-6 text-gray-700">Simulación de Control Crucero</h1>
+
+        <div class="text-center mb-4">
+            <span class="text-lg font-semibold text-gray-600">Estado del Sistema:</span>
+            <span id="status-display" class="block text-2xl font-bold text-indigo-600 mt-1">Sin Control</span>
+        </div>
+
+        <div class="mb-6 px-4">
+            <label for="speed-slider" class="block text-sm font-medium text-gray-700 mb-1">Velocidad Actual (Acelerador): <span id="current-speed-value" class="font-bold">60</span> km/h</label>
+            <input id="speed-slider" type="range" min="0" max="150" value="60" step="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+        </div>
+
+        <div class="text-center mb-6">
+             <div id="gauge-indicator" class="gauge">
+                 <span id="cruise-speed-display" class="gauge-value">60</span> <span class="gauge-label">Velocidad Crucero (km/h)</span>
+             </div>
+        </div>
+
+        <div class="text-center">
+            <button id="toggle-cruise-button" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-150 ease-in-out shadow-md border-b-4 border-blue-700 hover:border-blue-800">
+                Activar Control Crucero
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Elementos del DOM ---
+        const statusDisplay = document.getElementById('status-display');
+        const speedSlider = document.getElementById('speed-slider');
+        const currentSpeedValueDisplay = document.getElementById('current-speed-value');
+        const cruiseSpeedDisplay = document.getElementById('cruise-speed-display');
+        const toggleCruiseButton = document.getElementById('toggle-cruise-button');
+        const gaugeIndicator = document.getElementById('gauge-indicator'); // Referencia al gauge
+
+        // --- Definición de Estados ---
+        const STATES = {
+            CRUISE_OFF: 'Sin Control',
+            CRUISE_ON: 'Con Control Crucero'
+        };
+
+        // --- Variables de Estado ---
+        let currentState = STATES.CRUISE_OFF;
+        let currentSpeed = parseInt(speedSlider.value);
+        let targetSpeed = null; // Velocidad fijada por el control crucero
+
+        // --- Variables de Animación ---
+        let animationFrameId = null;
+        let isAnimatingSlider = false;
+        const ANIMATION_SPEED = 0.4; // Controla qué tan rápido regresa el slider (0 a 1)
+
+        // --- Funciones ---
+
+        /**
+         * Actualiza los displays de estado y velocidad crucero.
+         */
+        function updateDisplay() {
+            statusDisplay.textContent = currentState;
+            currentSpeedValueDisplay.textContent = Math.round(currentSpeed); // Muestra valor redondeado
+
+            if (currentState === STATES.CRUISE_ON && targetSpeed !== null) {
+                cruiseSpeedDisplay.textContent = targetSpeed; // Gauge muestra target speed
+                gaugeIndicator.classList.add('active'); // Estilo activo para gauge
+                toggleCruiseButton.textContent = 'Desactivar Control Crucero';
+                toggleCruiseButton.classList.add('active-button', 'bg-emerald-500', 'border-emerald-700');
+                toggleCruiseButton.classList.remove('bg-blue-500', 'border-blue-700');
+            } else {
+                cruiseSpeedDisplay.textContent = Math.round(currentSpeed); // Gauge muestra current speed
+                gaugeIndicator.classList.remove('active'); // Quita estilo activo
+                toggleCruiseButton.textContent = 'Activar Control Crucero';
+                toggleCruiseButton.classList.remove('active-button', 'bg-emerald-500', 'border-emerald-700');
+                toggleCruiseButton.classList.add('bg-blue-500', 'border-blue-700');
+            }
+        }
+
+        /**
+         * Inicia la animación para llevar el slider a la velocidad objetivo.
+         * @param {number} target - La velocidad a la que debe regresar el slider.
+         */
+        function animateSliderToTarget(target) {
+            if (isAnimatingSlider) return; // Evita iniciar múltiples animaciones
+            isAnimatingSlider = true;
+            console.log(`Iniciando animación hacia: ${target}`);
+
+            function animationStep() {
+                if (currentState !== STATES.CRUISE_ON) { // Detener si se desactiva el crucero
+                    isAnimatingSlider = false;
+                    console.log("Animación cancelada: Crucero desactivado.");
+                    return;
+                }
+
+                const currentValue = parseFloat(speedSlider.value);
+                const difference = target - currentValue;
+
+                if (Math.abs(difference) < 0.05) { // Umbral para detener
+                    speedSlider.value = target; // Ajuste final
+                    currentSpeed = target;
+                    updateDisplay();
+                    isAnimatingSlider = false;
+                    console.log("Animación completada.");
+                    animationFrameId = null;
+                    return;
+                }
+
+                // Calcular el nuevo valor (movimiento suave)
+                const nextValue = currentValue + difference * ANIMATION_SPEED;
+                speedSlider.value = nextValue;
+                currentSpeed = nextValue; // Actualizar currentSpeed durante la animación
+                updateDisplay(); // Actualizar displays en cada paso
+
+                // Solicitar el siguiente cuadro de animación
+                animationFrameId = requestAnimationFrame(animationStep);
+            }
+            // Cancelar cualquier animación anterior e iniciar la nueva
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = requestAnimationFrame(animationStep);
+        }
+
+
+        /**
+         * Cambia el estado del control crucero (Activado/Desactivado).
+         */
+        function toggleCruiseControl() {
+             // Cancelar animación si estaba en curso al cambiar de estado
+            if (isAnimatingSlider) {
+                 cancelAnimationFrame(animationFrameId);
+                 isAnimatingSlider = false;
+                 animationFrameId = null;
+                 console.log("Animación cancelada por cambio de estado.");
+            }
+
+            if (currentState === STATES.CRUISE_OFF) {
+                // --- Transición a CRUISE_ON ---
+                currentState = STATES.CRUISE_ON;
+                targetSpeed = Math.round(currentSpeed); // Fija la velocidad crucero (redondeada)
+                 // Asegurar que el slider esté exactamente en el target al activar
+                speedSlider.value = targetSpeed;
+                currentSpeed = targetSpeed;
+                console.log(`Control Crucero Activado. Velocidad fijada: ${targetSpeed} km/h`);
+            } else {
+                // --- Transición a CRUISE_OFF ---
+                currentState = STATES.CRUISE_OFF;
+                targetSpeed = null; // Borra la velocidad fijada
+                console.log("Control Crucero Desactivado.");
+            }
+            updateDisplay(); // Actualiza la interfaz
+        }
+
+        /**
+         * Maneja los cambios en el slider de velocidad.
+         */
+        function handleSliderInput() {
+            currentSpeed = parseFloat(speedSlider.value); // Usar parseFloat para la animación
+
+            // Si hay una animación en curso, la interacción del usuario la detiene temporalmente
+            // pero se reactivará si suelta el slider en un valor distinto al target.
+            if (isAnimatingSlider) {
+                 cancelAnimationFrame(animationFrameId);
+                 isAnimatingSlider = false;
+                 animationFrameId = null;
+                 console.log("Animación interrumpida por el usuario.");
+            }
+
+             // Actualizar display de velocidad actual SIEMPRE
+             currentSpeedValueDisplay.textContent = Math.round(currentSpeed);
+
+            if (currentState === STATES.CRUISE_ON) {
+                // Si está activo y el valor es diferente al target, iniciar animación
+                if (Math.abs(currentSpeed - targetSpeed) >= 0.05) { // Usar umbral
+                   console.log("Slider movido manualmente, iniciando retorno...");
+                   animateSliderToTarget(targetSpeed);
+                }
+                 // Actualizar el gauge (que muestra targetSpeed en este modo)
+                 cruiseSpeedDisplay.textContent = targetSpeed;
+
+            } else {
+                 // Si está inactivo, el gauge refleja la velocidad actual
+                 cruiseSpeedDisplay.textContent = Math.round(currentSpeed);
+            }
+        }
+
+        // --- Event Listeners ---
+        toggleCruiseButton.addEventListener('click', toggleCruiseControl);
+        // Usamos 'input' para detectar cambios mientras se arrastra
+        speedSlider.addEventListener('input', handleSliderInput);
+         // Podríamos usar 'change' para detectar cuando el usuario SUELTA el slider,
+         // pero 'input' permite la animación incluso mientras arrastra.
+
+        // --- Inicialización ---
+        currentSpeed = parseInt(speedSlider.value); // Asegurar valor inicial
+        updateDisplay(); // Asegura que la UI inicial sea correcta
+
+    </script>
+
+</body>
+</html>
