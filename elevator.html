@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación de Elevador (Stateflow)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilos adicionales */
+        .floor-indicator {
+            border: 1px solid #cbd5e1; /* gray-300 */
+            height: 80px; /* Altura de cada piso */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #4b5563; /* gray-600 */
+            background-color: #f3f4f6; /* gray-100 */
+        }
+        .elevator-car {
+            position: absolute;
+            left: 5px; /* Margen izquierdo */
+            right: 5px; /* Margen derecho */
+            height: 70px; /* Altura del carro, un poco menos que el piso */
+            background-color: #60a5fa; /* blue-400 */
+            border: 2px solid #3b82f6; /* blue-600 */
+            border-radius: 4px;
+            transition: bottom 1.5s ease-in-out; /* Transición suave para el movimiento */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.8rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        /* Posición inicial del carro (en el piso 1) */
+        .elevator-shaft {
+            position: relative;
+            background-color: #e5e7eb; /* gray-200 */
+            border: 1px solid #9ca3af; /* gray-400 */
+            border-radius: 4px;
+            height: 240px; /* 3 pisos * 80px */
+            width: 100px; /* Ancho del hueco */
+            margin: 0 auto; /* Centrar */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen font-sans">
+
+    <div class="bg-white p-8 rounded-lg shadow-xl max-w-sm w-full">
+        <h1 class="text-2xl font-bold text-center mb-6 text-gray-700">Simulación de Elevador</h1>
+
+        <div class="flex justify-around items-start mb-6">
+            <div class="space-y-3">
+                <h2 class="text-lg font-semibold text-gray-600 mb-2">Controles</h2>
+                <button onclick="requestFloor(3)" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out">Piso 3</button>
+                <button onclick="requestFloor(2)" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out">Piso 2</button>
+                <button onclick="requestFloor(1)" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out">Piso 1</button>
+
+                <button id="emergency-button" onclick="emergencyStop()" class="w-full mt-4 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out">Emergencia</button>
+                <button id="reset-button" onclick="resetEmergency()" class="w-full mt-2 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out hidden">Resetear</button>
+            </div>
+
+            <div class="flex flex-col items-center">
+                 <h2 class="text-lg font-semibold text-gray-600 mb-2">Visualización</h2>
+                <div class="elevator-shaft">
+                    <div class="floor-indicator">Piso 3</div>
+                    <div class="floor-indicator">Piso 2</div>
+                    <div class="floor-indicator">Piso 1</div>
+                    <div id="elevator-car" class="elevator-car" style="bottom: 5px;"> <span></span> </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center border-t pt-4 mt-4">
+            <span class="text-lg font-semibold text-gray-600">Piso Actual:</span>
+            <span id="current-floor-display" class="block text-3xl font-bold text-gray-800 mt-1">1</span>
+            <span class="text-lg font-semibold text-gray-600 mt-3">Estado:</span>
+            <span id="status-display" class="block text-2xl font-bold text-gray-800 mt-1">Parado</span>
+        </div>
+    </div>
+
+    <script>
+        // --- Elementos del DOM ---
+        const currentFloorDisplay = document.getElementById('current-floor-display');
+        const statusDisplay = document.getElementById('status-display');
+        const elevatorCar = document.getElementById('elevator-car');
+        const elevatorCarText = elevatorCar.querySelector('span');
+        const emergencyButton = document.getElementById('emergency-button');
+        const resetButton = document.getElementById('reset-button');
+
+        // --- Definición de Estados ---
+        const STATES = {
+            STOPPED: 'Parado',
+            MOVING_UP: 'Subiendo',
+            MOVING_DOWN: 'Bajando',
+            EMERGENCY: 'Emergencia'
+        };
+
+        // --- Constantes ---
+        const FLOORS = 3;
+        const TIME_PER_FLOOR = 1500; // Milisegundos para moverse entre pisos
+
+        // --- Variables de Estado ---
+        let currentState = STATES.STOPPED;
+        let currentFloor = 1; // Piso inicial
+        let targetFloor = 1;
+        let requestedFloors = new Set(); // Usamos un Set para evitar duplicados
+        let moveTimerId = null; // Identificador para setTimeout del movimiento
+
+        // --- Funciones ---
+
+        /**
+         * Actualiza el display de piso y estado, y la posición visual del carro.
+         */
+        function updateDisplay() {
+            currentFloorDisplay.textContent = currentFloor;
+            statusDisplay.textContent = currentState;
+
+            // Actualizar texto dentro del carro (opcional)
+            elevatorCarText.textContent = `${currentFloor} - ${currentState}`;
+
+            // Habilitar/Deshabilitar botones según estado
+            emergencyButton.disabled = (currentState === STATES.EMERGENCY);
+            resetButton.classList.toggle('hidden', currentState !== STATES.EMERGENCY);
+        }
+
+        /**
+         * Actualiza la posición visual del elevador.
+         */
+        function updateElevatorPosition() {
+            // Actualizar posición visual del carro
+            // bottom: 5px para piso 1, 85px para piso 2, 165px para piso 3
+            const bottomPosition = 5 + (currentFloor - 1) * 80;
+            elevatorCar.style.bottom = `${bottomPosition}px`;
+        }
+
+        /**
+         * Se llama cuando se presiona un botón de piso.
+         * @param {number} floor - El piso solicitado.
+         */
+        function requestFloor(floor) {
+            if (currentState === STATES.EMERGENCY) {
+                return; // No aceptar solicitudes en emergencia
+            }
+            if (floor < 1 || floor > FLOORS || floor === currentFloor) {
+                return; // Ignorar si es inválido o es el piso actual
+            }
+
+            requestedFloors.add(floor);
+
+            // Si está parado, iniciar movimiento inmediatamente
+            if (currentState === STATES.STOPPED) {
+                decideNextMove();
+            }
+        }
+
+        /**
+         * Detiene el elevador inmediatamente por emergencia.
+         */
+        function emergencyStop() {
+            if (currentState === STATES.EMERGENCY) return; // Ya en emergencia
+
+            console.log("¡BOTÓN DE EMERGENCIA PRESIONADO!");
+            clearTimeout(moveTimerId); // Detener cualquier movimiento en curso
+            moveTimerId = null;
+            currentState = STATES.EMERGENCY;
+            requestedFloors.clear(); // Borrar solicitudes pendientes
+            targetFloor = currentFloor; // El objetivo ahora es el piso actual
+            updateDisplay();
+        }
+
+        /**
+         * Resetea el sistema después de una emergencia.
+         */
+        function resetEmergency() {
+            if (currentState !== STATES.EMERGENCY) return;
+            console.log("Reseteando sistema de emergencia...");
+            currentState = STATES.STOPPED;
+            // Podríamos decidir ir al piso 1 o simplemente esperar nuevas solicitudes
+            // Por ahora, solo cambia el estado a Parado
+            updateDisplay();
+            // Podríamos llamar a decideNextMove() si quisiéramos procesar solicitudes antiguas,
+            // pero las borramos en emergencyStop().
+        }
+
+        /**
+         * Decide el próximo movimiento basado en las solicitudes pendientes.
+         */
+        function decideNextMove() {
+            if (currentState !== STATES.STOPPED || requestedFloors.size === 0) {
+                // Solo decidir si está parado y hay solicitudes
+                return;
+            }
+
+            // Lógica simple: ir al piso solicitado más cercano (o el primero en la lista)
+            // Una lógica más avanzada consideraría la dirección actual, etc.
+            targetFloor = requestedFloors.values().next().value; // Toma el primer elemento del Set
+            requestedFloors.delete(targetFloor); // Quita el piso de las solicitudes
+
+            console.log(`Decidido moverse a piso: ${targetFloor}`);
+
+            if (targetFloor > currentFloor) {
+                currentState = STATES.MOVING_UP;
+            } else if (targetFloor < currentFloor) {
+                currentState = STATES.MOVING_DOWN;
+            } else {
+                 // Esto no debería pasar si requestFloor funciona bien, pero por si acaso
+                 currentState = STATES.STOPPED;
+            }
+
+            updateDisplay();
+
+            if (currentState !== STATES.STOPPED) {
+                // Iniciar el movimiento inmediatamente
+                startElevatorMovement();
+            }
+        }
+
+        /**
+         * Inicia el movimiento del elevador hacia el piso objetivo.
+         */
+        function startElevatorMovement() {
+            // Calcular el piso siguiente en la dirección actual
+            let nextFloor = currentFloor;
+            if (currentState === STATES.MOVING_UP) {
+                nextFloor++;
+            } else if (currentState === STATES.MOVING_DOWN) {
+                nextFloor--;
+            }
+
+            // Actualizar la posición visual del elevador para iniciar la animación
+            const nextBottomPosition = 5 + (nextFloor - 1) * 80;
+            elevatorCar.style.bottom = `${nextBottomPosition}px`;
+
+            // Establecer un listener para el final de la transición CSS
+            elevatorCar.addEventListener('transitionend', handleMovementComplete, { once: true });
+        }
+
+        /**
+         * Maneja la finalización del movimiento del elevador.
+         */
+        function handleMovementComplete() {
+            // Actualizar el piso actual según la dirección del movimiento
+            if (currentState === STATES.MOVING_UP) {
+                currentFloor++;
+            } else if (currentState === STATES.MOVING_DOWN) {
+                currentFloor--;
+            }
+
+            console.log(`Llegando a piso: ${currentFloor}`);
+            updateDisplay();
+
+            // Verificar si llegó al destino
+            if (currentFloor === targetFloor) {
+                console.log(`Ha llegado al piso destino: ${targetFloor}`);
+                currentState = STATES.STOPPED;
+                updateDisplay();
+                // Después de llegar, verificar si hay más solicitudes
+                setTimeout(decideNextMove, 500); // Pequeña pausa antes de decidir el siguiente movimiento
+            } else {
+                // Si no ha llegado, continuar al siguiente piso
+                startElevatorMovement();
+            }
+        }
+
+        /**
+         * Simula el movimiento de un piso. Se llama recursivamente por setTimeout.
+         * Esta función ya no se utiliza, ha sido reemplazada por startElevatorMovement y handleMovementComplete.
+         */
+        function simulateStep() {
+            // Esta función ya no se utiliza, mantenida para referencia
+        }
+
+        // --- Inicialización ---
+        updateDisplay(); // Asegura que la UI inicial sea correcta
+        updateElevatorPosition(); // Asegura que la posición inicial del elevador sea correcta
+
+    </script>
+
+</body>
+</html>
