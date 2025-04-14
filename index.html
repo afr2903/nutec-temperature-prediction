@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulaciones de Control (Stateflow)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans">
+    <div class="container mx-auto px-4 py-12">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-800 mb-3">Simulaciones de Control</h1>
+            <p class="text-xl text-gray-600">Selecciona una simulación para comenzar</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
+            <!-- Tarjeta: Semáforo -->
+            <a href="traffic-light.html" class="card bg-white rounded-lg shadow-md overflow-hidden">
+                <div class="p-6 space-y-4">
+                    <div class="w-16 h-16 bg-red-500 rounded-full mx-auto mb-2 flex items-center justify-center">
+                        <span class="text-white text-2xl">🚦</span>
+                    </div>
+                    <h2 class="text-xl font-bold text-center text-gray-800">Semáforo</h2>
+                    <p class="text-gray-600 text-center text-sm">Simulación del comportamiento de un semáforo con estados y transiciones.</p>
+                    <button class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out mt-2">
+                        Iniciar Simulación
+                    </button>
+                </div>
+            </a>
+
+            <!-- Tarjeta: Elevador -->
+            <a href="elevator.html" class="card bg-white rounded-lg shadow-md overflow-hidden">
+                <div class="p-6 space-y-4">
+                    <div class="w-16 h-16 bg-blue-500 rounded-full mx-auto mb-2 flex items-center justify-center">
+                        <span class="text-white text-2xl">🛗</span>
+                    </div>
+                    <h2 class="text-xl font-bold text-center text-gray-800">Elevador</h2>
+                    <p class="text-gray-600 text-center text-sm">Simulación del funcionamiento de un sistema de elevador con tres pisos.</p>
+                    <button class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out mt-2">
+                        Iniciar Simulación
+                    </button>
+                </div>
+            </a>
+
+            <!-- Tarjeta: Control Crucero -->
+            <a href="cruise-control.html" class="card bg-white rounded-lg shadow-md overflow-hidden">
+                <div class="p-6 space-y-4">
+                    <div class="w-16 h-16 bg-indigo-500 rounded-full mx-auto mb-2 flex items-center justify-center">
+                        <span class="text-white text-2xl">🚗</span>
+                    </div>
+                    <h2 class="text-xl font-bold text-center text-gray-800">Control Crucero</h2>
+                    <p class="text-gray-600 text-center text-sm">Simulación de un sistema de control de velocidad crucero para vehículos.</p>
+                    <button class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out mt-2">
+                        Iniciar Simulación
+                    </button>
+                </div>
+            </a>
+            
+            <!-- Tarjeta: Climatización -->
+            <a href="ac.html" class="card bg-white rounded-lg shadow-md overflow-hidden">
+                <div class="p-6 space-y-4">
+                    <div class="w-16 h-16 bg-blue-400 rounded-full mx-auto mb-2 flex items-center justify-center">
+                        <span class="text-white text-2xl">❄️</span>
+                    </div>
+                    <h2 class="text-xl font-bold text-center text-gray-800">Climatización</h2>
+                    <p class="text-gray-600 text-center text-sm">Simulación de un sistema de aire acondicionado con modos manual y automático.</p>
+                    <button class="w-full bg-blue-400 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out mt-2">
+                        Iniciar Simulación
+                    </button>
+                </div>
+            </a>
+
+        </div>
+
+        <footer class="text-center mt-16 text-gray-500 text-sm">
+            <p>Actividades de Modelado de Comportamiento con Stateflow</p>
+        </footer>
+    </div>
+</body>
+</html> 
