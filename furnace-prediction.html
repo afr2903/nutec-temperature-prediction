@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Furnace Temperature Uniformity Predictor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        .container {
+            max-width: 700px; /* Increased width for more variables */
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: white;
+            border-radius: 0.75rem; /* md rounded */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500; /* medium */
+            color: #374151; /* gray-700 */
+        }
+        .input-group input[type="number"], .input-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db; /* gray-300 */
+            border-radius: 0.5rem; /* sm rounded */
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+            background-color: white; /* Ensure select background is white */
+        }
+        .input-group input[type="number"]:focus, .input-group select:focus {
+            outline: none;
+            border-color: #6366f1; /* indigo-500 */
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+        .btn-predict {
+            width: 100%;
+            padding: 0.875rem 1.5rem;
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+            font-weight: 600; /* semibold */
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-predict:hover {
+            background-color: #4338ca; /* indigo-700 */
+        }
+        .result-box {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background-color: #eef2ff; /* indigo-50 */
+            border: 1px solid #c7d2fe; /* indigo-200 */
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+        .result-box h3 {
+            margin-bottom: 0.5rem;
+            color: #3730a3; /* indigo-800 */
+            font-size: 1.125rem; /* text-lg */
+            font-weight: 600;
+        }
+        .result-box p {
+            font-size: 1.5rem; /* text-2xl */
+            font-weight: 700; /* bold */
+            color: #4f46e5; /* indigo-600 */
+        }
+        .error-message {
+            color: #ef4444; /* red-500 */
+            font-size: 0.875rem; /* text-sm */
+            margin-top: 0.25rem;
+        }
+        /* Tooltip styles */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 250px; /* Adjusted width */
+            background-color: #374151; /* gray-700 */
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px; /* Increased padding */
+            position: absolute;
+            z-index: 10;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -125px; /* Half of width */
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.875rem;
+            font-weight: 400;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .tooltip .tooltiptext::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #374151 transparent transparent transparent;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        .info-icon {
+            display: inline-block;
+            width: 1rem; /* 16px */
+            height: 1rem; /* 16px */
+            margin-left: 0.25rem; /* 4px */
+            color: #9ca3af; /* gray-400 */
+            cursor: help;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-8">Predictor de Uniformidad de Temperatura del Horno</h1>
+
+        <div id="variableInputsContainer">
+            </div>
+        <div id="validationMessage" class="error-message mb-4"></div>
+
+
+        <button id="predictButton" class="btn-predict">Predecir Uniformidad de Temperatura</button>
+
+        <div id="predictionResult" class="result-box" style="display: none;">
+            <h3>Uniformidad de Temperatura Predicha (+/- °C o °F):</h3>
+            <p id="temperatureValue"></p>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const intercept = 13.233675927628898;
+        const modelVariables = [
+            {
+                id: "operatingTemperatureF",
+                label: "Operating Temperature (°F)",
+                type: "numerical", // Explicitly define type
+                coefficient: 0.003937053805499829,
+                tooltip: "Temperatura de operación del horno en grados Fahrenheit."
+            },
+            {
+                id: "tipoTuboSalidaQuemador",
+                label: "Tipo de tubo a la salida del quemador",
+                type: "categorical",
+                tooltip: "Seleccione el tipo de tubo en la salida del quemador.",
+                options: [
+                    { value: "salida a 45°", display: "Salida a 45°", coefficient: 0.2416722900231446 },
+                    { value: "salida plana", display: "Salida plana", coefficient: -0.2416722900230972 },
+                    { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }
+                ]
+            },
+            {
+                id: "patronFlujoAire",
+                label: "Patrón de flujo del aire",
+                type: "categorical",
+                tooltip: "Seleccione el patrón de flujo del aire. (Nombres largos abreviados para opciones)",
+                options: [
+                    { value: "horizontal", display: "Horizontal", coefficient: -2.121341119857206 },
+                    { value: "vertical", display: "Vertical", coefficient: 1.4776725285301213 },
+                    { value: "vertical directo hacia arriba", display: "Vertical directo hacia arriba", coefficient: 0.6436685913270599 },
+                    { value: "nan", display: "No aplica / Desconocido", coefficient: 3.1086244689504383e-15 } // Essentially 0
+                ]
+            },
+            {
+                id: "posicionQuemador",
+                label: "Posición de quemador",
+                type: "categorical",
+                tooltip: "Seleccione la posición del quemador.",
+                options: [
+                    { value: "antes", display: "Antes", coefficient: 4.440892098500626e-16 }, // Essentially 0
+                    { value: "nan", display: "No aplica / Desconocido", coefficient: -3.1086244689504383e-15 } // Essentially 0
+                ]
+            },
+            {
+                id: "tipoRecirculador",
+                label: "Tipo de Recirculador, scroll y aspas",
+                type: "categorical",
+                tooltip: "Seleccione el tipo de recirculador.",
+                options: [
+                    { value: "axial", display: "Axial", coefficient: 0.0 },
+                    { value: "centrifugo", display: "Centrífugo", coefficient: -0.5927338034577583 },
+                    { value: "plug fan con scroll casero", display: "Plug fan con scroll casero", coefficient: -2.6842107456217175 },
+                    { value: "plug fan con scroll hechizo", display: "Plug fan con scroll hechizo", coefficient: 3.276944549079468 },
+                    { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }
+                ]
+            },
+            {
+                id: "tipoAislamientoCarroPiso",
+                label: "Tipo de aislamiento del carro o piso",
+                type: "categorical",
+                tooltip: "Seleccione el tipo de aislamiento.",
+                options: [
+                    { value: "fibra", display: "Fibra", coefficient: 0.3462949508432744 },
+                    { value: "refractario duro", display: "Refractario duro", coefficient: -0.3462949508432775 },
+                    { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }
+                ]
+            },
+            {
+                id: "tipoHorno",
+                label: "Tipo de Horno",
+                type: "categorical",
+                tooltip: "Seleccione el tipo de horno.",
+                options: [
+                    { value: "fuego directo", display: "Fuego directo", coefficient: 1.4148734909575624 },
+                    { value: "recirculacion", display: "Recirculación", coefficient: -1.414873490957554 },
+                    { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }
+                ]
+            },
+            {
+                id: "emptyOrLoadedTUS",
+                label: "Empty or loaded for TUS",
+                type: "categorical",
+                tooltip: "Seleccione el estado de carga para TUS (Temperature Uniformity Survey).",
+                options: [
+                    { value: "empty", display: "Empty", coefficient: -0.12470666260875919 },
+                    { value: "empty heat up load test", display: "Empty heat up load test", coefficient: 3.276944549079468 },
+                    { value: "empty with heat sinks", display: "Empty with heat sinks", coefficient: -2.5862846293676367 },
+                    { value: "loaded", display: "Loaded", coefficient: -0.5659532571030816 },
+                    { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }
+                ]
+            },
+            {
+                id: "tipoControlPresion",
+                label: "Tipo de control de presión",
+                type: "categorical",
+                tooltip: "Seleccione el tipo de control de presión.",
+                options: [
+                    { value: "damper lazo abierto", display: "Damper lazo abierto", coefficient: 3.276944549079469 },
+                    { value: "lazo abierto", display: "Lazo abierto", coefficient: -3.679161969382171 },
+                    { value: "lazo cerrado", display: "Lazo cerrado", coefficient: 0.40221742030272645 },
+                    { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }
+                ]
+            }
+        ];
+
+        // --- DOM Elements ---
+        const inputsContainer = document.getElementById('variableInputsContainer');
+        const predictButton = document.getElementById('predictButton');
+        const predictionResultDiv = document.getElementById('predictionResult');
+        const temperatureValueP = document.getElementById('temperatureValue');
+        const validationMessageDiv = document.getElementById('validationMessage');
+
+        // --- Functions ---
+
+        /**
+         * Creates and appends input fields for each variable.
+         */
+        function createInputFields() {
+            inputsContainer.innerHTML = ''; // Clear previous inputs
+            modelVariables.forEach(variable => {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'input-group';
+
+                const labelEl = document.createElement('label');
+                labelEl.htmlFor = variable.id;
+                labelEl.textContent = variable.label;
+
+                if (variable.tooltip) {
+                    const tooltipSpan = document.createElement('span');
+                    tooltipSpan.className = 'tooltip';
+                    
+                    const infoIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                    infoIcon.setAttribute("class", "info-icon");
+                    infoIcon.setAttribute("viewBox", "0 0 20 20");
+                    infoIcon.setAttribute("fill", "currentColor");
+                    infoIcon.innerHTML = `<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />`;
+                    
+                    const tooltipTextSpan = document.createElement('span');
+                    tooltipTextSpan.className = 'tooltiptext';
+                    tooltipTextSpan.textContent = variable.tooltip;
+
+                    tooltipSpan.appendChild(infoIcon);
+                    tooltipSpan.appendChild(tooltipTextSpan);
+                    labelEl.appendChild(tooltipSpan);
+                }
+                groupDiv.appendChild(labelEl);
+
+                if (variable.type === "numerical") {
+                    const input = document.createElement('input');
+                    input.type = 'number';
+                    input.id = variable.id;
+                    input.name = variable.id;
+                    input.placeholder = `Ingrese valor para ${variable.label}`;
+                    input.step = "any";
+                    groupDiv.appendChild(input);
+                } else if (variable.type === "categorical") {
+                    const select = document.createElement('select');
+                    select.id = variable.id;
+                    select.name = variable.id;
+                    
+                    variable.options.forEach(opt => {
+                        const optionEl = document.createElement('option');
+                        optionEl.value = opt.value; // The actual category name
+                        optionEl.textContent = opt.display; // User-friendly display name
+                        select.appendChild(optionEl);
+                    });
+                    groupDiv.appendChild(select);
+                }
+                inputsContainer.appendChild(groupDiv);
+            });
+        }
+
+        /**
+         * Calculates the predicted temperature uniformity.
+         */
+        function predictTemperature() {
+            validationMessageDiv.textContent = ''; // Clear previous validation messages
+            let prediction = intercept;
+            let allInputsValid = true;
+
+            modelVariables.forEach(variable => {
+                const element = document.getElementById(variable.id);
+                if (!element) {
+                    console.error(`Element with ID ${variable.id} not found.`);
+                    allInputsValid = false;
+                    return;
+                }
+
+                if (variable.type === "numerical") {
+                    const value = parseFloat(element.value);
+                    if (isNaN(value)) {
+                        validationMessageDiv.textContent = `Por favor, ingrese un número válido para: ${variable.label}`;
+                        element.focus();
+                        allInputsValid = false;
+                        return; 
+                    }
+                    prediction += variable.coefficient * value;
+                } else if (variable.type === "categorical") {
+                    const selectedValue = element.value;
+                    const selectedOption = variable.options.find(opt => opt.value === selectedValue);
+                    if (selectedOption) {
+                        prediction += selectedOption.coefficient;
+                    } else {
+                        // Should not happen if dropdown is populated correctly
+                        validationMessageDiv.textContent = `Opción inválida seleccionada para: ${variable.label}`;
+                        allInputsValid = false;
+                        return;
+                    }
+                }
+            });
+
+            if (!allInputsValid) {
+                predictionResultDiv.style.display = 'none';
+                return;
+            }
+
+            temperatureValueP.textContent = prediction.toFixed(4);
+            predictionResultDiv.style.display = 'block';
+        }
+
+        // --- Event Listeners ---
+        predictButton.addEventListener('click', predictTemperature);
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            createInputFields();
+        });
+    </script>
+</body>
+</html>
