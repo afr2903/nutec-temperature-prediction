@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Predictor de Uniformidad de Temperatura del Horno con Gráfico Detallado</title>
+    <title>Predictor de Uniformidad y Tiempo de Rampa del Horno</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -43,7 +43,7 @@
             border-color: #6366f1;
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
         }
-        .btn { /* Combined button styles */
+        .btn {
             width: 100%;
             padding: 0.875rem 1.5rem;
             color: white;
@@ -60,8 +60,13 @@
         .btn-predict:hover {
             background-color: #4338ca; /* indigo-700 */
         }
-        .result-box {
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
             margin-top: 2rem;
+        }
+        .result-box {
             padding: 1.5rem;
             border-radius: 0.5rem;
             text-align: center;
@@ -70,21 +75,21 @@
         }
         .result-box h3 {
             margin-bottom: 0.5rem;
-            font-size: 1.125rem;
+            font-size: 1.125rem; /* text-lg */
             font-weight: 600;
             color: #3730a3; /* indigo-800 */
         }
         .result-box p {
-            font-size: 1.5rem;
+            font-size: 1.5rem; /* text-2xl */
             font-weight: 700;
             color: #4f46e5; /* indigo-600 */
         }
         .error-message {
             color: #ef4444; /* red-500 */
-            font-size: 0.875rem;
+            font-size: 0.875rem; /* text-sm */
             margin-top: 0.25rem;
         }
-        .tooltip {
+        .tooltip { /* Tooltip styles from previous version */
             position: relative; display: inline-block;
         }
         .tooltip .tooltiptext {
@@ -98,66 +103,54 @@
             border-style: solid; border-color: #374151 transparent transparent transparent;
         }
         .tooltip:hover .tooltiptext { visibility: visible; opacity: 1; }
-        .info-icon {
+        .info-icon { /* Info icon styles from previous version */
             display: inline-block; width: 1rem; height: 1rem; margin-left: 0.25rem;
             color: #9ca3af; cursor: help; vertical-align: middle;
         }
-        .chart-container {
+        .chart-container { /* Chart container styles from previous version */
             width: 100%;
             background-color: #f9fafb; /* gray-50 */
             border-radius: 0.5rem;
             border: 1px solid #e5e7eb; /* gray-200 */
-            margin-top: 1.5rem; /* Reduced margin */
+            margin-top: 1.5rem;
             padding: 0.5rem;
         }
-        #temperatureChart {
-            width: 100%;
-            height: 350px; /* Adjusted height */
-        }
-        #uniformityDetailChart {
-            width: 100%;
-            height: 250px; /* Adjusted height */
-            margin-top: 1rem; /* Space between charts */
-        }
-        .chart-title {
+        #temperatureChart { width: 100%; height: 350px; }
+        #uniformityDetailChart { width: 100%; height: 250px; margin-top: 1rem; }
+        .chart-title { /* Chart title styles from previous version */
             font-size: 0.9rem;
             font-weight: 500;
             color: #4b5563; /* gray-600 */
             text-align: center;
             margin-bottom: 0.25rem;
         }
-         .zoom-indicator-group line {
-            stroke: #fb923c; /* orange-400 */
-            stroke-width: 1.5px;
-            stroke-dasharray: 3,3;
-        }
-        .zoom-indicator-group circle {
-            fill: none;
-            stroke: #fb923c; /* orange-400 */
-            stroke-width: 1.5px;
-        }
-         .zoom-indicator-group text {
+        .zoom-indicator-group text { /* Zoom indicator styles from previous version */
             fill: #fb923c; /* orange-400 */
             font-size: 10px;
             text-anchor: middle;
         }
-
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">Predictor de Uniformidad de Temperatura del Horno</h1>
-        <p class="text-center text-gray-600 mb-8">Ingrese los parámetros del horno para predecir la uniformidad y visualizar el ciclo.</p>
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">Predictor de Horno: Uniformidad y Tiempo de Rampa</h1>
+        <p class="text-center text-gray-600 mb-8">Ingrese los parámetros del horno para las predicciones y visualización del ciclo.</p>
 
         <div id="variableInputsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             </div>
         <div id="validationMessage" class="error-message mb-4 col-span-full"></div>
 
-        <button id="predictButton" class="btn btn-predict">Predecir Uniformidad y Graficar</button>
+        <button id="predictButton" class="btn btn-predict">Predecir y Graficar</button>
 
-        <div id="predictionResult" class="result-box" style="display: none;">
-            <h3>Uniformidad de Temperatura Predicha (+/- °F):</h3>
-            <p id="temperatureValue"></p>
+        <div id="predictionsContainer" class="results-grid" style="display: none;">
+            <div id="uniformityPredictionResult" class="result-box">
+                <h3>Uniformidad de Temp. Predicha (+/- °F):</h3>
+                <p id="uniformityValue"></p>
+            </div>
+            <div id="rampTimePredictionResult" class="result-box">
+                <h3>Tiempo de Rampa Predicho (minutos):</h3>
+                <p id="rampTimeValue"></p>
+            </div>
         </div>
 
         <div id="chartsSection" style="display: none;">
@@ -174,38 +167,145 @@
 
     <script>
         // --- Configuration ---
-        const intercept = 13.233675927628898;
-        const modelVariables = [ // Same modelVariables as before, ensure all options are present
-            { id: "operatingTemperatureF", label: "Operating Temperature (°F)", type: "numerical", coefficient: 0.003937053805499829, tooltip: "Temperatura de operación del horno en °F.", forModel: true, value: 1000 },
-            { id: "tipoTuboSalidaQuemador", label: "Tipo de tubo a la salida del quemador", type: "categorical", tooltip: "Seleccione el tipo de tubo.", forModel: true, options: [ { value: "salida a 45°", display: "Salida a 45°", coefficient: 0.2416722900231446 }, { value: "salida plana", display: "Salida plana", coefficient: -0.2416722900230972 }, { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }] },
-            { id: "patronFlujoAire", label: "Patrón de flujo del aire", type: "categorical", tooltip: "Seleccione el patrón de flujo.", forModel: true, options: [ { value: "horizontal", display: "Horizontal", coefficient: -2.121341119857206 }, { value: "vertical", display: "Vertical", coefficient: 1.4776725285301213 }, { value: "vertical directo hacia arriba", display: "Vertical directo hacia arriba", coefficient: 0.6436685913270599 }, { value: "nan", display: "No aplica / Desconocido", coefficient: 3.1086244689504383e-15 }] },
-            { id: "posicionQuemador", label: "Posición de quemador", type: "categorical", tooltip: "Seleccione la posición.", forModel: true, options: [ { value: "antes", display: "Antes", coefficient: 4.440892098500626e-16 }, { value: "nan", display: "No aplica / Desconocido", coefficient: -3.1086244689504383e-15 }] },
-            { id: "tipoRecirculador", label: "Tipo de Recirculador", type: "categorical", tooltip: "Seleccione el tipo.", forModel: true, options: [ { value: "axial", display: "Axial", coefficient: 0.0 }, { value: "centrifugo", display: "Centrífugo", coefficient: -0.5927338034577583 }, { value: "plug fan con scroll casero", display: "Plug fan con scroll casero", coefficient: -2.6842107456217175 }, { value: "plug fan con scroll hechizo", display: "Plug fan con scroll hechizo", coefficient: 3.276944549079468 }, { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }] },
-            { id: "tipoAislamientoCarroPiso", label: "Tipo de aislamiento", type: "categorical", tooltip: "Seleccione el aislamiento.", forModel: true, options: [ { value: "fibra", display: "Fibra", coefficient: 0.3462949508432744 }, { value: "refractario duro", display: "Refractario duro", coefficient: -0.3462949508432775 }, { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }] },
-            { id: "tipoHorno", label: "Tipo de Horno", type: "categorical", tooltip: "Seleccione el tipo.", forModel: true, options: [ { value: "fuego directo", display: "Fuego directo", coefficient: 1.4148734909575624 }, { value: "recirculacion", display: "Recirculación", coefficient: -1.414873490957554 }, { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }] },
-            { id: "emptyOrLoadedTUS", label: "Carga para TUS", type: "categorical", tooltip: "Seleccione estado de carga TUS.", forModel: true, options: [ { value: "empty", display: "Empty", coefficient: -0.12470666260875919 }, { value: "empty heat up load test", display: "Empty heat up load test", coefficient: 3.276944549079468 }, { value: "empty with heat sinks", display: "Empty with heat sinks", coefficient: -2.5862846293676367 }, { value: "loaded", display: "Loaded", coefficient: -0.5659532571030816 }, { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }] },
-            { id: "tipoControlPresion", label: "Tipo de control de presión", type: "categorical", tooltip: "Seleccione control de presión.", forModel: true, options: [ { value: "damper lazo abierto", display: "Damper lazo abierto", coefficient: 3.276944549079469 }, { value: "lazo abierto", display: "Lazo abierto", coefficient: -3.679161969382171 }, { value: "lazo cerrado", display: "Lazo cerrado", coefficient: 0.40221742030272645 }, { value: "nan", display: "No aplica / Desconocido", coefficient: 0.0 }] },
-            { id: "rampTimeMinutes", label: "Ramp Time (minutes)", type: "numerical", forModel: false, tooltip: "Tiempo para alcanzar la temperatura de operación.", value: 10 },
-            { id: "lagTimeMinutes", label: "Lag Time (minutes)", type: "numerical", forModel: false, tooltip: "Retraso entre el primer y último sensor en alcanzar la temperatura.", value: 41 }
+        const uniformityIntercept = 17.79461920207951;
+        const rampTimeIntercept = 130.45034908541047;
+
+        // Combined list of all unique variables needed for either model
+        const modelVariables = [
+            // Variables for Uniformity Model (some might also be for Ramp Time)
+            { id: "operatingTemperatureF", label: "Operating Temperature (°F)", type: "numerical", tooltip: "Temperatura de operación del horno en °F.",
+                forUniformity: true, uniformityCoeff: 0.006298495359441892, forRampTime: false, value: 1000 },
+            { id: "patronFlujoAire", label: "Patrón de flujo del aire", type: "categorical", tooltip: "Seleccione el patrón de flujo.", forUniformity: true,
+                options: [
+                    { value: "horizontal", display: "Horizontal", uniformityCoeff: -1.7770801049379101 },
+                    { value: "vertical", display: "Vertical", uniformityCoeff: 1.0500528577432409 },
+                    { value: "vertical directo hacia arriba", display: "Vertical directo hacia arriba", uniformityCoeff: 0.7270272471946486 },
+                    { value: "nan", display: "No aplica / Desconocido", uniformityCoeff: -2.3314683517128287e-15 }
+                ], forRampTime: false
+            },
+            { id: "tipoControlPresion", label: "Tipo de control de presión", type: "categorical", tooltip: "Seleccione tipo de control de presión.", forUniformity: true,
+                options: [
+                    { value: "damper lazo abierto", display: "Damper lazo abierto", uniformityCoeff: 16.40219142093832 },
+                    { value: "lazo abierto", display: "Lazo abierto", uniformityCoeff: 0.30794171392389597 },
+                    { value: "lazo cerrado", display: "Lazo cerrado", uniformityCoeff: -3.2224787967318878 },
+                    { value: "lazo cerrado damper paletas", display: "Lazo cerrado damper paletas", uniformityCoeff: -13.487654338130328 },
+                    { value: "nan", display: "No aplica / Desconocido", uniformityCoeff: -5.329070518200751e-15 }
+                ], forRampTime: false
+            },
+            { id: "tipoTuboSalidaQuemador", label: "Tipo de tubo a la salida del quemador", type: "categorical", tooltip: "Seleccione tipo de tubo.", forUniformity: true,
+                options: [
+                    { value: "salida a 45°", display: "Salida a 45°", uniformityCoeff: 7.813365881113577 },
+                    { value: "salida plana", display: "Salida plana", uniformityCoeff: -7.813365881113579 },
+                    { value: "nan", display: "No aplica / Desconocido", uniformityCoeff: -5.329070518200751e-15 }
+                ], forRampTime: false
+            },
+            { id: "tipoHorno", label: "Tipo de Horno", type: "categorical", tooltip: "Seleccione tipo de horno.", forUniformity: true,
+                options: [
+                    { value: "fuego directo", display: "Fuego directo", uniformityCoeff: 3.332530284432054 },
+                    { value: "recirculacion", display: "Recirculación", uniformityCoeff: -3.3325302844320523 },
+                    { value: "nan", display: "No aplica / Desconocido", uniformityCoeff: -1.4210854715202004e-14 }
+                ], forRampTime: false
+            },
+            { id: "posicionTomaExtractor", label: "Posición de la toma del Extractor", type: "categorical", tooltip: "Seleccione posición toma extractor.", forUniformity: true,
+                options: [
+                    { value: "con extractor, arriba cargada a la derecha", display: "Con extractor, arriba cargada a la derecha", uniformityCoeff: 1.914496120371244 },
+                    { value: "sin extractor", display: "Sin extractor", uniformityCoeff: -2.8480772648756076 },
+                    { value: "sin extractor, salida lateral superior al fondo.", display: "Sin extractor, salida lateral sup. al fondo", uniformityCoeff: -0.8245717689662846 },
+                    { value: "trasera superior", display: "Trasera superior", uniformityCoeff: 1.758152913470677 },
+                    { value: "nan", display: "No aplica / Desconocido", uniformityCoeff: 0.0 }
+                ], forRampTime: false
+            },
+            { id: "conRompeFlamas", label: "Con Rompe flamas", type: "categorical", tooltip: "Seleccione si tiene rompe flamas.", forUniformity: true,
+                options: [
+                    { value: "no", display: "No", uniformityCoeff: -0.027442055508962535 },
+                    { value: "si", display: "Sí", uniformityCoeff: 0.027442055508962535 },
+                    { value: "nan", display: "No aplica / Desconocido", uniformityCoeff: 0.0 }
+                ], forRampTime: false
+            },
+            { id: "reguladorCrossConnected", label: "Regulador cross connected", type: "categorical", tooltip: "Seleccione si es regulador cross connected.", forUniformity: true,
+                options: [
+                    { value: "no", display: "No", uniformityCoeff: 0.2952419699738362 },
+                    { value: "si", display: "Sí", uniformityCoeff: -0.2952419699738362 },
+                    { value: "nan", display: "No aplica / Desconocido", uniformityCoeff: 0.0 }
+                ], forRampTime: false
+            },
+            { id: "posicionQuemador", label: "Posición de quemador", type: "categorical", tooltip: "Seleccione posición del quemador.", forUniformity: true,
+                options: [ // Note: Coefficients are 0.0 for "antes" and "nan" in uniformity model
+                    { value: "antes", display: "Antes", uniformityCoeff: 0.0 },
+                    { value: "nan", display: "No aplica / Desconocido", uniformityCoeff: 0.0 }
+                ], forRampTime: false
+            },
+            { id: "numeroZonas", label: "Número de zonas", type: "categorical", tooltip: "Seleccione número de zonas.", forUniformity: true,
+                options: [
+                    { value: "1.0", display: "1 Zona", uniformityCoeff: 7.135088793603013 },
+                    { value: "2.0", display: "2 Zonas", uniformityCoeff: 3.5446048536553274 },
+                    { value: "3.0", display: "3 Zonas", uniformityCoeff: -4.381760884899712 },
+                    { value: "4.0", display: "4 Zonas", uniformityCoeff: -6.29793276235862 },
+                    { value: "nan", display: "No aplica / Desconocido", uniformityCoeff: 0.0 }
+                ], forRampTime: false
+            },
+             // Variables for Ramp Time Model (some might also be for Uniformity)
+            { id: "dimInternasHornoL", label: "Dimensiones Internas Horno (L, Pulgadas)", type: "numerical", tooltip: "Largo o profundo del horno en pulgadas.",
+                forRampTime: true, rampTimeCoeff: 1.9960397776149208, forUniformity: false, value: 100 },
+            { id: "dimSettingCargaL", label: "Dimensiones Setting de Carga (L, Pulgadas)", type: "numerical", tooltip: "Largo o profundo del setting de carga en pulgadas.",
+                forRampTime: true, rampTimeCoeff: -1.7165430254878622, forUniformity: false, value: 50 },
+            { id: "cantidadQuemadores", label: "Cantidad de Quemadores", type: "categorical", tooltip: "Seleccione cantidad de quemadores.", forRampTime: true,
+                options: [
+                    { value: "1.0", display: "1 Quemador", rampTimeCoeff: 93.54707963948448 },
+                    { value: "2.0", display: "2 Quemadores", rampTimeCoeff: 68.41827736514624 },
+                    { value: "3.0", display: "3 Quemadores", rampTimeCoeff: 16.866383113408148 },
+                    { value: "4.0", display: "4 Quemadores", rampTimeCoeff: -10.118290718790309 },
+                    { value: "6.0", display: "6 Quemadores", rampTimeCoeff: -51.23955795832745 },
+                    { value: "8.0", display: "8 Quemadores", rampTimeCoeff: -83.9169531985183 },
+                    { value: "9.0", display: "9 Quemadores", rampTimeCoeff: -169.97091583032204 },
+                    { value: "15.0", display: "15 Quemadores", rampTimeCoeff: 136.41397758791908 },
+                    { value: "nan", display: "No aplica / Desconocido", rampTimeCoeff: 4.263256414560601e-14 }
+                ], forUniformity: false
+            },
+            // Variable used in BOTH models - ensure coefficients for both are present if applicable
+            { id: "cantidadExtracciones", label: "Cantidad de extracciones", type: "categorical", tooltip: "Seleccione cantidad de extracciones.",
+                forUniformity: true, forRampTime: true,
+                options: [ // Coefficients for both models per option
+                    { value: "0.0", display: "0 Extracciones", uniformityCoeff: -8.324424581905435, rampTimeCoeff: -147.4499137348371 },
+                    { value: "1.0", display: "1 Extracción", uniformityCoeff: -8.017600656509833, rampTimeCoeff: -179.87902268921704 },
+                    { value: "2.0", display: "2 Extracciones", uniformityCoeff: 6.241529106935562, rampTimeCoeff: 79.39184111016768 },
+                    { value: "4.0", display: "4 Extracciones", uniformityCoeff: 10.100496131479714, rampTimeCoeff: 247.93709531388689 },
+                    { value: "nan", display: "No aplica / Desconocido", uniformityCoeff: 0.0, rampTimeCoeff: 0.0 }
+                ]
+            }
+            // Removed "emptyOrLoadedTUS" from this array
         ];
+
 
         // --- DOM Elements ---
         const inputsContainer = document.getElementById('variableInputsContainer');
         const predictButton = document.getElementById('predictButton');
-        const predictionResultDiv = document.getElementById('predictionResult');
-        const temperatureValueP = document.getElementById('temperatureValue');
+        const predictionsContainerDiv = document.getElementById('predictionsContainer');
+        const uniformityValueP = document.getElementById('uniformityValue');
+        const rampTimeValueP = document.getElementById('rampTimeValue');
         const validationMessageDiv = document.getElementById('validationMessage');
         const chartsSectionDiv = document.getElementById('chartsSection');
 
         // --- Functions ---
         function createInputFields() {
-            inputsContainer.innerHTML = ''; // Clear previous inputs
+            inputsContainer.innerHTML = '';
+            const displayedVariables = new Set(); // To avoid duplicate inputs if a var is in both models
+
             modelVariables.forEach(variable => {
+                // This check is now redundant if "emptyOrLoadedTUS" is completely removed,
+                // but good to keep if other variables might be conditionally excluded.
+                if (variable.id === "emptyOrLoadedTUS") return; // Explicitly skip this variable
+
+                if (displayedVariables.has(variable.id)) return; // Skip if already added
+
                 const groupDiv = document.createElement('div');
                 groupDiv.className = 'input-group';
-                 if (!variable.forModel) {
-                    groupDiv.classList.add('md:col-span-2');
+                // Span full width if it's one of the new variables not part of the original 2-column layout
+                const nonModelSpecificInputs = ["dimInternasHornoL", "dimSettingCargaL", "cantidadQuemadores"];
+                if (nonModelSpecificInputs.includes(variable.id) && !variable.forUniformity) {
+                     groupDiv.classList.add('md:col-span-2');
                 }
+
 
                 const labelEl = document.createElement('label');
                 labelEl.htmlFor = variable.id;
@@ -250,32 +350,44 @@
                     groupDiv.appendChild(select);
                 }
                 inputsContainer.appendChild(groupDiv);
+                displayedVariables.add(variable.id);
             });
         }
 
         function predictAndGraph() {
             validationMessageDiv.textContent = '';
-            let prediction = intercept;
+            let predUniformity = uniformityIntercept;
+            let predRampTime = rampTimeIntercept;
             let allInputsValid = true;
 
             modelVariables.forEach(variable => {
+                if (variable.id === "emptyOrLoadedTUS") return; // Skip processing for this variable
+
                 const element = document.getElementById(variable.id);
-                if (!element) {
-                    console.error(`Elemento con ID ${variable.id} no encontrado.`);
+                if (!element && (variable.forUniformity || variable.forRampTime)) { // Only error if used by a model
+                    console.error(`Elemento con ID ${variable.id} no encontrado y es necesario.`);
                     allInputsValid = false; return;
                 }
+                if (!element) return; // Skip if element not found (e.g. var not used by any model now)
+
+
                 if (variable.type === "numerical") {
                     const value = parseFloat(element.value);
-                    if (isNaN(value)) {
+                    if (isNaN(value) && (variable.forUniformity || variable.forRampTime)) {
                         validationMessageDiv.textContent = `Por favor, ingrese un número válido para: ${variable.label}`;
                         element.focus(); allInputsValid = false; return;
                     }
-                    if (variable.forModel) prediction += variable.coefficient * value;
-                } else if (variable.type === "categorical" && variable.forModel) {
+                    if (!isNaN(value)) {
+                        if (variable.forUniformity) predUniformity += (variable.uniformityCoeff || 0) * value;
+                        if (variable.forRampTime) predRampTime += (variable.rampTimeCoeff || 0) * value;
+                    }
+                } else if (variable.type === "categorical") {
                     const selectedValue = element.value;
                     const selectedOption = variable.options.find(opt => opt.value === selectedValue);
-                    if (selectedOption) prediction += selectedOption.coefficient;
-                    else {
+                    if (selectedOption) {
+                        if (variable.forUniformity) predUniformity += (selectedOption.uniformityCoeff || 0);
+                        if (variable.forRampTime) predRampTime += (selectedOption.rampTimeCoeff || 0);
+                    } else if (variable.forUniformity || variable.forRampTime) {
                         validationMessageDiv.textContent = `Opción inválida seleccionada para: ${variable.label}`;
                         allInputsValid = false; return;
                     }
@@ -283,42 +395,43 @@
             });
 
             if (!allInputsValid) {
-                predictionResultDiv.style.display = 'none';
+                predictionsContainerDiv.style.display = 'none';
                 chartsSectionDiv.style.display = 'none';
                 return;
             }
 
-            const predictedUniformity = parseFloat(prediction.toFixed(4));
-            temperatureValueP.textContent = predictedUniformity;
-            predictionResultDiv.style.display = 'block';
+            const finalPredictedUniformity = parseFloat(predUniformity.toFixed(4));
+            const finalPredictedRampTime = parseFloat(predRampTime.toFixed(4));
+
+            uniformityValueP.textContent = finalPredictedUniformity;
+            rampTimeValueP.textContent = finalPredictedRampTime;
+            predictionsContainerDiv.style.display = 'grid'; // Use grid for side-by-side
             chartsSectionDiv.style.display = 'block';
 
-
             const opTemp = parseFloat(document.getElementById('operatingTemperatureF').value);
-            const rampTime = parseFloat(document.getElementById('rampTimeMinutes').value);
-            const lagTime = parseFloat(document.getElementById('lagTimeMinutes').value);
 
-            if (isNaN(opTemp) || isNaN(rampTime) || isNaN(lagTime) || rampTime <= 0) {
-                validationMessageDiv.textContent = "Valores inválidos para graficar (Operating Temp, Ramp Time > 0, Lag Time).";
+            if (isNaN(opTemp) || finalPredictedRampTime <= 0) {
+                validationMessageDiv.textContent = "Temperatura de Operación inválida o Tiempo de Rampa predicho no positivo.";
                 chartsSectionDiv.style.display = 'none';
                 return;
             }
-            drawTemperatureChart(opTemp, rampTime, lagTime, predictedUniformity);
-            drawUniformityCloseupChart(opTemp, predictedUniformity);
+            drawTemperatureChart(opTemp, finalPredictedRampTime, finalPredictedUniformity);
+            drawUniformityCloseupChart(opTemp, finalPredictedUniformity);
         }
 
-        function drawTemperatureChart(opTemp, rampTime, lagTime, uniformity) {
+        function drawTemperatureChart(opTemp, rampTime, uniformity) { // Removed lagTime
             const svg = d3.select("#temperatureChart");
             svg.selectAll("*").remove();
 
-            const margin = {top: 20, right: 30, bottom: 50, left: 60}; // Adjusted margins
+            const margin = {top: 20, right: 30, bottom: 50, left: 60};
             const chartWidth = parseInt(svg.style("width")) - margin.left - margin.right;
             const chartHeight = parseInt(svg.style("height")) - margin.top - margin.bottom;
 
-            if (chartWidth <=0 || chartHeight <=0) return; // Avoid drawing if no space
+            if (chartWidth <=0 || chartHeight <=0) return;
 
             const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-            const totalTime = rampTime + lagTime + Math.max(20, rampTime * 0.5); // Ensure enough space after ramp+lag
+            // Adjusted totalTime to not depend on lagTime
+            const totalTime = rampTime + Math.max(20, rampTime * 0.5);
 
             const xScale = d3.scaleLinear().domain([0, totalTime]).range([0, chartWidth]);
             const yScale = d3.scaleLinear().domain([0, opTemp * 1.15]).range([chartHeight, 0]);
@@ -327,12 +440,10 @@
             for (let t = 0; t <= rampTime; t += rampTime / 100) {
                 mainCurveData.push({time: t, temp: opTemp * Math.pow(t / rampTime, 2)});
             }
-            for (let t = rampTime + (rampTime / 100); t <= totalTime; t += Math.max(1, totalTime/200)) {
+            for (let t = rampTime + (rampTime > 0 ? rampTime/100 : 0.1) ; t <= totalTime; t += Math.max(1, totalTime/200)) {
                  mainCurveData.push({time: t, temp: opTemp});
             }
 
-            const lagCurveData = mainCurveData.map(d => ({time: d.time + lagTime, temp: d.temp}))
-                                          .filter(d => d.time <= totalTime);
             const line = d3.line().x(d => xScale(d.time)).y(d => yScale(d.temp)).curve(d3.curveMonotoneX);
 
             g.append("rect") // Uniformity band
@@ -343,89 +454,90 @@
                 .attr("fill", "rgba(79, 70, 229, 0.1)");
 
             g.append("path").datum(mainCurveData).attr("fill", "none").attr("stroke", "#4f46e5").attr("stroke-width", 2.5).attr("d", line);
-            g.append("path").datum(lagCurveData).attr("fill", "none").attr("stroke", "#a5b4fc").attr("stroke-width", 2).attr("stroke-dasharray", "4 4").attr("d", line);
+            // Removed lag curve path
 
             g.append("g").attr("transform", `translate(0,${chartHeight})`).call(d3.axisBottom(xScale).ticks(Math.min(10, Math.floor(totalTime/Math.max(1,rampTime/2))))).append("text").attr("fill", "#000").attr("x", chartWidth / 2).attr("y", 35).attr("text-anchor", "middle").text("Tiempo (minutos)");
             g.append("g").call(d3.axisLeft(yScale).ticks(5).tickFormat(d => `${d}°F`)).append("text").attr("fill", "#000").attr("transform", "rotate(-90)").attr("y", -margin.left + 15).attr("x", -chartHeight / 2).attr("text-anchor", "middle").text("Temperatura (°F)");
 
-            // Zoom indicator
-            const zoomTimeStart = rampTime + Math.min(lagTime, 5) + 2; // A point in stable zone
+            // Zoom indicator (logic remains similar, adjust zoomTimeStart if needed)
+            const zoomTimeStart = rampTime + 2; // Start zoom indicator shortly after ramp time
             const zoomTimeEnd = zoomTimeStart + Math.min(10, totalTime - zoomTimeStart -1);
-            if (zoomTimeEnd > zoomTimeStart) {
+             if (zoomTimeEnd > zoomTimeStart && rampTime > 0) { // Added rampTime > 0 condition
                 const zoomIndicator = g.append("g").attr("class", "zoom-indicator-group");
                 const rectX = xScale(zoomTimeStart);
-                const rectY = yScale(opTemp + uniformity * 1.5); // Slightly above band
+                const rectY = yScale(opTemp + uniformity * 1.5);
                 const rectWidth = xScale(zoomTimeEnd) - xScale(zoomTimeStart);
-                const rectHeight = yScale(opTemp - uniformity*1.5) - rectY;
+                const rectHeight = Math.max(0,yScale(opTemp - uniformity*1.5) - rectY);
 
-                zoomIndicator.append("rect")
-                    .attr("x", rectX)
-                    .attr("y", rectY)
-                    .attr("width", rectWidth)
-                    .attr("height", rectHeight)
-                    .attr("fill", "none")
-                    .attr("stroke", "#fb923c")
-                    .attr("stroke-width", 1.5)
-                    .attr("stroke-dasharray", "3,3");
+                if (rectWidth > 0 && rectHeight > 0) {
+                    zoomIndicator.append("rect")
+                        .attr("x", rectX)
+                        .attr("y", rectY)
+                        .attr("width", rectWidth)
+                        .attr("height", rectHeight)
+                        .attr("fill", "none")
+                        .attr("stroke", "#fb923c")
+                        .attr("stroke-width", 1.5)
+                        .attr("stroke-dasharray", "3,3");
 
-                zoomIndicator.append("text")
-                    .attr("x", rectX + rectWidth / 2)
-                    .attr("y", rectY - 5)
-                    .text("Detalle ↓")
-                    .style("font-size", "10px");
+                    zoomIndicator.append("text")
+                        .attr("x", rectX + rectWidth / 2)
+                        .attr("y", rectY - 5)
+                        .text("Detalle ↓")
+                        .style("font-size", "10px");
+                }
             }
 
-
+            // Updated legend (removed lag time entry)
             const legend = g.append("g").attr("font-family", "sans-serif").attr("font-size", 10).attr("text-anchor", "end")
                 .selectAll("g").data([
-                    {name: "Temp. Principal", color: "#4f46e5"}, {name: "Temp. Retrasada", color: "#a5b4fc"}, {name: "Banda Uniformidad", color: "rgba(79, 70, 229, 0.1)"}
-                ]).enter().append("g").attr("transform", (d, i) => `translate(0,${i * 18})`); // Reduced spacing
+                    {name: "Temp. Principal", color: "#4f46e5"},
+                    {name: "Banda Uniformidad", color: "rgba(79, 70, 229, 0.1)"}
+                ]).enter().append("g").attr("transform", (d, i) => `translate(0,${i * 18})`);
             legend.append("rect").attr("x", chartWidth - 15).attr("width", 15).attr("height", 15).attr("fill", d => d.color);
             legend.append("text").attr("x", chartWidth - 20).attr("y", 7.5).attr("dy", "0.32em").text(d => d.name);
         }
 
-        function drawUniformityCloseupChart(opTemp, uniformity) {
+        function drawUniformityCloseupChart(opTemp, uniformity) { // This function remains largely the same
             const svg = d3.select("#uniformityDetailChart");
             svg.selectAll("*").remove();
 
-            const margin = {top: 20, right: 30, bottom: 40, left: 70}; // Increased left margin for temp values
+            const margin = {top: 20, right: 30, bottom: 40, left: 70};
             const chartWidth = parseInt(svg.style("width")) - margin.left - margin.right;
             const chartHeight = parseInt(svg.style("height")) - margin.top - margin.bottom;
 
             if (chartWidth <=0 || chartHeight <=0) return;
 
             const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-
-            const timeWindow = 20; // Show 20 "time units" in closeup
+            const timeWindow = 20;
             const xScale = d3.scaleLinear().domain([0, timeWindow]).range([0, chartWidth]);
-            // Y-scale centered around opTemp, showing slightly more than uniformity band
-            const yScaleDomainPadding = uniformity * 0.5;
+            const yScaleDomainPadding = uniformity > 0 ? uniformity * 0.5 : 5; // Ensure padding even if uniformity is 0
+            const yMin = opTemp - uniformity - yScaleDomainPadding;
+            const yMax = opTemp + uniformity + yScaleDomainPadding;
+
             const yScale = d3.scaleLinear()
-                .domain([opTemp - uniformity - yScaleDomainPadding, opTemp + uniformity + yScaleDomainPadding])
+                .domain([yMin, yMax])
                 .range([chartHeight, 0]);
 
             const noisyData = [];
             for (let t = 0; t <= timeWindow; t++) {
-                const noise = (Math.random() - 0.5) * 1.8 * uniformity; // Noise within approx 90% of uniformity
+                const noiseMagnitude = uniformity > 0 ? uniformity : 1; // Base noise on uniformity, or 1 if uniformity is 0
+                const noise = (Math.random() - 0.5) * 1.8 * noiseMagnitude;
                 noisyData.push({time: t, temp: opTemp + noise});
             }
 
             const line = d3.line().x(d => xScale(d.time)).y(d => yScale(d.temp)).curve(d3.curveMonotoneX);
 
-            // Uniformity band lines
             [[opTemp + uniformity, "Upper Limit"], [opTemp - uniformity, "Lower Limit"], [opTemp, "Set Point"]].forEach(item => {
                 g.append("line")
-                    .attr("x1", 0)
-                    .attr("x2", chartWidth)
-                    .attr("y1", yScale(item[0]))
-                    .attr("y2", yScale(item[0]))
-                    .attr("stroke", item[2] === "Set Point" ? "#4ade80" : "#fbbf24") // Green for setpoint, Amber for limits
+                    .attr("x1", 0).attr("x2", chartWidth)
+                    .attr("y1", yScale(item[0])).attr("y2", yScale(item[0]))
+                    .attr("stroke", item[2] === "Set Point" ? "#4ade80" : "#fbbf24")
                     .attr("stroke-width", 1.5)
                     .attr("stroke-dasharray", item[2] === "Set Point" ? "none" : "5,5");
             });
 
             g.append("path").datum(noisyData).attr("fill", "none").attr("stroke", "#6366f1").attr("stroke-width", 2).attr("d", line);
-
             g.append("g").attr("transform", `translate(0,${chartHeight})`).call(d3.axisBottom(xScale).ticks(5)).append("text").attr("fill", "#000").attr("x", chartWidth / 2).attr("y", 30).attr("text-anchor", "middle").text("Tiempo (unidades relativas)");
             g.append("g").call(d3.axisLeft(yScale).ticks(5).tickFormat(d => `${d.toFixed(1)}°F`));
         }
